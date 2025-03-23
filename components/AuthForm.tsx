@@ -17,7 +17,7 @@ import { Input } from "@/components/ui/input"
 import Image from "next/image"
 import Link from "next/link"
 import { toast } from "sonner"
-import FormField from "./ui/FormField"
+import FormField from "./FormField"
 import { useRouter } from "next/navigation"
 
 // const formSchema = z.object({
