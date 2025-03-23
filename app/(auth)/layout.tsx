@@ -1,9 +1,8 @@
 import React, { ReactNode } from 'react'
 
-const AuthLayout = ({children}:{children: ReactNode}) => {
+const AuthLayout = ({ children }: { children: ReactNode }) => {
     return (
-        <div>
-            navbar for sign-in and sign-up
+        <div className='auth-layout'>
             {children}
         </div>
     )
