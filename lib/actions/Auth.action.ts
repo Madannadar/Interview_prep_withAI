@@ -129,10 +129,10 @@ export async function getLatestInterviews(params: GetLatestInterviewsParams): Pr
     const interviews = await db
     .collection('interviews')
     // .where('userId', '==', userId)
+    .orderBy('createdAt', 'desc')
     .where('finalized', '==', true)
     .where('userId', '!=', userId)
     .limit(limit)
-    .orderBy('createdAt', 'desc')
     .get();
 
     return interviews.docs.map((doc) => ({
