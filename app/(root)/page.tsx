@@ -6,17 +6,20 @@ import InterviewCard from "@/components/interviewCard";
 
 import { getCurrentUser } from "@/lib/actions/Auth.action";
 import {
-  getInterviewByUserIde,
+  getInterviewByUserId,
   getLatestInterviews,
-} from "@/lib/actions/Auth.action";
+} from '@/lib/actions/general.action';
 async function Home() {
   const user = await getCurrentUser();
-
+  // parelle fetching
   const [userInterviews, allInterview] = await Promise.all([
-    getInterviewByUserIde(user?.id!),
+    getInterviewByUserId(user?.id!),
     getLatestInterviews({ userId: user?.id! }),
   ]);
-
+  // single fetching
+  // const userInterviews = await getInterviewByUserIde(user?.id!);
+  // const latestInterviews = await getLatestInterviews({ userId: user?.id!}
+  
   const hasPastInterviews = userInterviews?.length! > 0;
   const hasUpcomingInterviews = allInterview?.length! > 0;
 
@@ -52,7 +55,7 @@ async function Home() {
               <InterviewCard
                 key={interview.id}
                 userId={user?.id}
-                interviewId={interview.id}
+                id={interview.id}
                 role={interview.role}
                 type={interview.type}
                 techstack={interview.techstack}
@@ -74,7 +77,7 @@ async function Home() {
               <InterviewCard
                 key={interview.id}
                 userId={user?.id}
-                interviewId={interview.id}
+                id={interview.id}
                 role={interview.role}
                 type={interview.type}
                 techstack={interview.techstack}
