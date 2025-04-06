@@ -110,4 +110,15 @@ export async function isAuthenticated() {
 
     return !!user; // to get a bool value if true -> false -> true hence !!
 }
-
+export async function signOut() {
+    const cookieStore = await cookies(); 
+  
+    cookieStore.set('session', '', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      expires: new Date(0),
+      path: '/',
+    });
+  
+    return { success: true };
+  }
