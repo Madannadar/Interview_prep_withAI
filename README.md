@@ -20,6 +20,37 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## Express API (Cognitive Analysis)
+
+This repo also includes a small standalone Express server with a single endpoint: `POST /cognitive-analysis`.
+
+### Run the API server
+
+```bash
+npm run api
+```
+
+The server runs on `http://localhost:3000`.
+
+### Example Postman request
+
+- **Method**: `POST`
+- **URL**: `http://localhost:3000/cognitive-analysis`
+- **Headers**: `Content-Type: application/json`
+- **Body (raw JSON)**:
+
+```json
+{
+  "text": "I will use a sliding window and expand/shrink based on duplicates.",
+  "code": "function solve(s){ let left=0,right=0; while(right<s.length){ right++; } }",
+  "behavior": {
+    "typingSpeed": 60,
+    "pauseCount": 2,
+    "tabSwitches": 1
+  }
+}
+```
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:
