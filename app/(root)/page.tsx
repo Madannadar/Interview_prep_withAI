@@ -11,11 +11,16 @@ import {
 } from '@/lib/actions/general.action';
 async function Home() {
   const user = await getCurrentUser();
-  // parelle fetching
-  const [userInterviews, allInterview] = await Promise.all([
-    getInterviewByUserId(user?.id!),
-    getLatestInterviews({ userId: user?.id! }),
-  ]);
+
+  // Only fetch interview data when the user is authenticated.
+  // If user is null (no session or network error), skip the Firestore queries
+  // to avoid passing `undefined` as a query value, which throws an error.
+  const [userInterviews, allInterview] = user
+    ? await Promise.all([
+        getInterviewByUserId(user.id),
+        getLatestInterviews({ userId: user.id }),
+      ])
+    : [[], []];
   // single fetching
   // const userInterviews = await getInterviewByUserIde(user?.id!);
   // const latestInterviews = await getLatestInterviews({ userId: user?.id!}

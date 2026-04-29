@@ -86,7 +86,10 @@ export async function getCurrentUser(): Promise<User | null> {
     if(!sessionCookie) return null;
 
     try {
-       const decodedClaims = await auth.verifySessionCookie(sessionCookie, true);
+       // Only check for revocation in production to avoid ENOTFOUND errors
+       // when identitytoolkit.googleapis.com is unreachable in dev environments.
+       const checkRevoked = process.env.NODE_ENV === 'production';
+       const decodedClaims = await auth.verifySessionCookie(sessionCookie, checkRevoked);
        const userRecord = await db
        .collection('users')
        .doc(decodedClaims.uid)

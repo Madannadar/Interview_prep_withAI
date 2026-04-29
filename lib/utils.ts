@@ -45,3 +45,16 @@ export const getRandomInterviewCover = () => {
   const randomIndex = Math.floor(Math.random() * interviewCovers.length);
   return `/covers${interviewCovers[randomIndex]}`;
 };
+
+/** Derive a focus score 0–100 from behavior metrics (usable in both client and server) */
+export function computeFocusScore(metrics: BehaviorMetrics): number {
+  const { pauseCount, tabSwitches, avgResponseDelay, speechActivityRatio } = metrics;
+
+  let score = 100;
+  score -= tabSwitches * 12;
+  score -= Math.min(pauseCount * 4, 24);
+  score -= avgResponseDelay > 8 ? 15 : avgResponseDelay > 5 ? 8 : 0;
+  score += Math.round(speechActivityRatio * 10); // engagement bonus
+
+  return Math.max(0, Math.min(100, Math.round(score)));
+}

@@ -100,12 +100,19 @@ export const mappings = {
 export const interviewer: CreateAssistantDTO = {
   name: "Interviewer",
   firstMessage:
-    "Hello! Thank you for taking the time to speak with me today. I'm excited to learn more about you and your experience.",
+    "Hello! Thank you for taking the time to speak with me today. I'm excited to learn more about you and your experience. Are you ready to begin?",
+
+  // ── STT: Deepgram Nova-2 ─────────────────────────────────────────────────
+  // endpointing:300 means Deepgram waits 300ms of silence before finalising a
+  // transcript — reduces dropped one-word answers and false early endings.
   transcriber: {
     provider: "deepgram",
     model: "nova-2",
     language: "en",
+    endpointing: 300,   // ms; default is 10 — too aggressive for interview pauses
   },
+
+  // ── TTS: ElevenLabs ──────────────────────────────────────────────────────
   voice: {
     provider: "11labs",
     voiceId: "sarah",
@@ -115,9 +122,11 @@ export const interviewer: CreateAssistantDTO = {
     style: 0.5,
     useSpeakerBoost: true,
   },
+
+  // ── LLM ──────────────────────────────────────────────────────────────────
   model: {
     provider: "openai",
-    model: "gpt-4",
+    model: "gpt-4o",          // faster than gpt-4; better latency for voice
     messages: [
       {
         role: "system",
@@ -128,32 +137,30 @@ Follow the structured question flow:
 {{questions}}
 
 Engage naturally & react appropriately:
-Listen actively to responses and acknowledge them before moving forward.
-Ask brief follow-up questions if a response is vague or requires more detail.
-Keep the conversation flowing smoothly while maintaining control.
-Be professional, yet warm and welcoming:
+- Listen actively to responses and acknowledge them before moving forward.
+- Ask brief follow-up questions if a response is vague or requires more detail.
+- Keep the conversation flowing smoothly while maintaining control.
+- Be professional, yet warm and welcoming.
 
-Use official yet friendly language.
-Keep responses concise and to the point (like in a real voice interview).
-Avoid robotic phrasing—sound natural and conversational.
-Answer the candidate’s questions professionally:
+Use official yet friendly language. Keep responses concise. Avoid robotic phrasing.
 
-If asked about the role, company, or expectations, provide a clear and relevant answer.
-If unsure, redirect the candidate to HR for more details.
+CRITICAL — Silence & Listening Rules:
+- After asking a question, WAIT for the candidate to respond. Do NOT rush to the next question.
+- If you detect silence or an unclear response, say: "I didn't quite catch that — could you please repeat your answer?"
+- Do NOT end the call due to silence. Only end the call after you have completed all questions AND said a proper farewell.
+- The conversation must follow this loop: You ask → Candidate responds → You acknowledge → You ask next question.
 
 Conclude the interview properly:
-Thank the candidate for their time.
-Inform them that the company will reach out soon with feedback.
-End the conversation on a polite and positive note.
+- Thank the candidate for their time.
+- Inform them that the company will reach out soon with feedback.
+- End on a polite and positive note.
 
-
-- Be sure to be professional and polite.
-- Keep all your responses short and simple. Use official language, but be kind and welcoming.
-- This is a voice conversation, so keep your responses short, like in a real conversation. Don't ramble for too long.`,
+Keep all responses short and conversational. This is a voice interview.`,
       },
     ],
   },
 };
+
 
 export const feedbackSchema = z.object({
   totalScore: z.number(),
@@ -187,6 +194,8 @@ export const feedbackSchema = z.object({
   strengths: z.array(z.string()),
   areasForImprovement: z.array(z.string()),
   finalAssessment: z.string(),
+  hiringDecision: z.enum(["Strong Hire", "Hire", "Lean Hire", "No Hire"]),
+  hiringJustification: z.string(),
 });
 
 export const interviewCovers = [
@@ -205,37 +214,37 @@ export const interviewCovers = [
 ];
 
 export const dummyInterviews: Interview[] = [
-    {
-        id: "1",
-        userId: "user1",
-        role: "Frontend Developer",
-        type: "Technical",
-        techstack: ["React", "JavaScript", "CSS", "HTML"],
-        level: "Intermediate",
-        questions: ["What is React?", "Explain the Virtual DOM.", "What are React hooks?"],
-        finalized: false,
-        createdAt: "2025-03-19T10:00:00Z"
-    },
-    {
-        id: "2",
-        userId: "user2",
-        role: "Backend Developer",
-        type: "Technical",
-        techstack: ["Node.js", "Express", "MongoDB", "TypeScript"],
-        level: "Advanced",
-        questions: ["How does Node.js handle asynchronous operations?", "Explain middleware in Express.", "What are indexes in MongoDB?"],
-        finalized: true,
-        createdAt: "2025-03-18T15:30:00Z"
-    },
-    {
-        id: "3",
-        userId: "user3",
-        role: "Machine Learning Engineer",
-        type: "Behavioral & Technical",
-        techstack: ["Python", "TensorFlow", "scikit-learn", "SQL"],
-        level: "Beginner",
-        questions: ["What is overfitting in machine learning?", "Explain the difference between supervised and unsupervised learning.", "Describe a project where you applied machine learning."],
-        finalized: false,
-        createdAt: "2025-03-17T08:45:00Z"
-    }
+  {
+    id: "1",
+    userId: "user1",
+    role: "Frontend Developer",
+    type: "Technical",
+    techstack: ["React", "JavaScript", "CSS", "HTML"],
+    level: "Intermediate",
+    questions: ["What is React?", "Explain the Virtual DOM.", "What are React hooks?"],
+    finalized: false,
+    createdAt: "2025-03-19T10:00:00Z"
+  },
+  {
+    id: "2",
+    userId: "user2",
+    role: "Backend Developer",
+    type: "Technical",
+    techstack: ["Node.js", "Express", "MongoDB", "TypeScript"],
+    level: "Advanced",
+    questions: ["How does Node.js handle asynchronous operations?", "Explain middleware in Express.", "What are indexes in MongoDB?"],
+    finalized: true,
+    createdAt: "2025-03-18T15:30:00Z"
+  },
+  {
+    id: "3",
+    userId: "user3",
+    role: "Machine Learning Engineer",
+    type: "Behavioral & Technical",
+    techstack: ["Python", "TensorFlow", "scikit-learn", "SQL"],
+    level: "Beginner",
+    questions: ["What is overfitting in machine learning?", "Explain the difference between supervised and unsupervised learning.", "Describe a project where you applied machine learning."],
+    finalized: false,
+    createdAt: "2025-03-17T08:45:00Z"
+  }
 ];
