@@ -3,6 +3,12 @@ import { google } from "@ai-sdk/google";
 import { getRandomInterviewCover } from "@/lib/utils";
 import { db } from "@/firebase/admin";
 
+// ── Server-side idempotency guard ─────────────────────────────────────────────
+// Tracks in-flight generation requests to prevent quota spikes from Vapi
+// retries or duplicate webhook calls. Key = `${userid}:${role}:${level}`.
+const inFlightRequests = new Map<string, number>(); // key → timestamp
+const IN_FLIGHT_TTL_MS = 10_000; // 10 s cooldown between identical requests
+
 export async function GET() {
     return new Response(JSON.stringify({ success: true, data: "Thank You!" }), {
         status: 200,
@@ -13,6 +19,25 @@ export async function GET() {
 export async function POST(request: Request) {
     try {
         const { type, role, level, techstack, amount, userid } = await request.json();
+
+        // ── Deduplication check ───────────────────────────────────────────────
+        const requestKey = `${userid}:${role}:${level}`;
+        const now = Date.now();
+        const lastRequest = inFlightRequests.get(requestKey);
+
+        if (lastRequest && now - lastRequest < IN_FLIGHT_TTL_MS) {
+            const waitMs = IN_FLIGHT_TTL_MS - (now - lastRequest);
+            console.warn(`⚠️ [generate] Duplicate request blocked for key="${requestKey}" — retry in ${waitMs}ms`);
+            return new Response(
+                JSON.stringify({ success: false, error: "Duplicate request — please wait before retrying" }),
+                { status: 429, headers: { "Content-Type": "application/json" } }
+            );
+        }
+        inFlightRequests.set(requestKey, now);
+        // Auto-clean after TTL to avoid memory leaks
+        setTimeout(() => inFlightRequests.delete(requestKey), IN_FLIGHT_TTL_MS);
+
+        console.log("🚨 AI CALL TRIGGERED — generateText", { timestamp: now, requestKey });
 
         const response = await generateText({
             model: google("gemini-2.5-flash"),

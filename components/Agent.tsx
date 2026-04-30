@@ -153,6 +153,14 @@ const Agent = ({ userName, userId, type, interviewId, questions }: AgentProps) =
         pauseCount: 0, tabSwitches: 0, avgResponseDelay: 0,
         sessionDurationSeconds: 0, speechActivityRatio: 0,
     });
+    // Guard refs — prevent duplicate AI calls
+    const isFeedbackGeneratingRef = useRef(false);
+    const isCallingRef = useRef(false);
+    // Stable refs for Vapi event handler callbacks (avoids re-registering listeners)
+    const listeningStateRef = useRef<ListeningState>('idle');
+    const onSTTSpeechStartRef = useRef<() => void>(() => {});
+    const onSTTSpeechEndRef = useRef<() => void>(() => {});
+    const onSTTTranscriptRef = useRef<(t: string, f: boolean, r: string) => void>(() => {});
 
     useEffect(() => { messagesRef.current = messages; }, [messages]);
 
@@ -175,7 +183,17 @@ const Agent = ({ userName, userId, type, interviewId, questions }: AgentProps) =
         onSTTTranscript,
     } = useAudioDebugger();
 
+    // Keep stable refs in sync so Vapi handlers never need to be re-registered
+    useEffect(() => { listeningStateRef.current = listeningState; }, [listeningState]);
+    useEffect(() => { onSTTSpeechStartRef.current = onSTTSpeechStart; }, [onSTTSpeechStart]);
+    useEffect(() => { onSTTSpeechEndRef.current = onSTTSpeechEnd; }, [onSTTSpeechEnd]);
+    useEffect(() => { onSTTTranscriptRef.current = onSTTTranscript; }, [onSTTTranscript]);
+
     // ── Vapi global events ────────────────────────────────────────────────────
+    // IMPORTANT: This effect intentionally has an empty dependency array.
+    // All callbacks that vary are accessed via stable refs to guarantee that
+    // Vapi listeners are registered EXACTLY ONCE — preventing duplicate
+    // 'call-end' / 'call-start' events that would trigger multiple AI calls.
     useEffect(() => {
         const onCallStart = () => {
             console.log('[vapi] ✅ call-start');
@@ -194,12 +212,12 @@ const Agent = ({ userName, userId, type, interviewId, questions }: AgentProps) =
         const onMessage = (message: Message) => {
             // Partial transcript
             if (message.type === 'transcript' && message.transcriptType === 'partial') {
-                onSTTTranscript(message.transcript, false, message.role);
+                onSTTTranscriptRef.current(message.transcript, false, message.role);
                 return;
             }
             // Final transcript
             if (message.type === 'transcript' && message.transcriptType === 'final') {
-                onSTTTranscript(message.transcript, true, message.role);
+                onSTTTranscriptRef.current(message.transcript, true, message.role);
                 const newMessage = { role: message.role, content: message.transcript };
                 setMessages(prev => [...prev, newMessage]);
 
@@ -219,13 +237,13 @@ const Agent = ({ userName, userId, type, interviewId, questions }: AgentProps) =
             setIsSpeaking(false);
             setListeningState('listening');
             onAISpeechEnd();
-            onSTTSpeechEnd();
+            onSTTSpeechEndRef.current();
         };
 
         const onVolumeLevel = (level: number) => {
-            if (listeningState === 'listening' && level > 0.05) {
+            if (listeningStateRef.current === 'listening' && level > 0.05) {
                 onUserSpeechStart();
-                onSTTSpeechStart();
+                onSTTSpeechStartRef.current();
             }
         };
 
@@ -250,8 +268,7 @@ const Agent = ({ userName, userId, type, interviewId, questions }: AgentProps) =
             vapi.off('error', onError);
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [onSessionStart, onAISpeechEnd, onUserSpeechStart, listeningState,
-        onSTTSpeechStart, onSTTSpeechEnd, onSTTTranscript, stopMicMonitoring]);
+    }, []); // ← Empty array: listeners registered exactly once, callbacks use refs
 
     // ── Cognitive analysis ────────────────────────────────────────────────────
     const runCognitiveAnalysis = useCallback(async (currentMessages: SavedMessage[]) => {
@@ -286,15 +303,28 @@ const Agent = ({ userName, userId, type, interviewId, questions }: AgentProps) =
 
     // ── Feedback ──────────────────────────────────────────────────────────────
     const handleGenerateFeedback = useCallback(async () => {
-        const { success, feedbackId: id } = await createFeedback({
-            interviewId: interviewId!,
-            userId: userId!,
-            transcript: messagesRef.current,
-            cognitiveData: latestCognitiveRef.current,
-            behaviorMetrics: behaviorMetricsRef.current,
-        });
-        if (success && id) router.push(`/interview/${interviewId}/feedback`);
-        else router.push('/');
+        // Guard: prevent duplicate feedback AI calls (e.g. StrictMode double-invoke or
+        // multiple call-end events arriving before state settles)
+        if (isFeedbackGeneratingRef.current) {
+            console.warn('⚠️ [createFeedback] Duplicate call blocked — already generating');
+            return;
+        }
+        isFeedbackGeneratingRef.current = true;
+        console.log('🚨 AI CALL TRIGGERED — createFeedback', { timestamp: Date.now() });
+
+        try {
+            const { success, feedbackId: id } = await createFeedback({
+                interviewId: interviewId!,
+                userId: userId!,
+                transcript: messagesRef.current,
+                cognitiveData: latestCognitiveRef.current,
+                behaviorMetrics: behaviorMetricsRef.current,
+            });
+            if (success && id) router.push(`/interview/${interviewId}/feedback`);
+            else router.push('/');
+        } finally {
+            isFeedbackGeneratingRef.current = false;
+        }
     }, [interviewId, userId, router]);
 
     useEffect(() => {
@@ -306,23 +336,35 @@ const Agent = ({ userName, userId, type, interviewId, questions }: AgentProps) =
 
     // ── Call controls ─────────────────────────────────────────────────────────
     const handleCall = async () => {
+        // Guard: prevent rapid double-clicks from launching two Vapi sessions
+        if (isCallingRef.current || callStatus === CallStatus.CONNECTING || callStatus === CallStatus.ACTIVE) {
+            console.warn('⚠️ [handleCall] Duplicate call attempt blocked');
+            return;
+        }
+        isCallingRef.current = true;
         setCallStatus(CallStatus.CONNECTING);
         console.log('[call] Starting — requesting mic + launching Vapi…');
 
-        // Start Web Audio monitor BEFORE vapi.start so we get pre-call volume
-        await startMicMonitoring();
+        try {
+            // Start Web Audio monitor BEFORE vapi.start so we get pre-call volume
+            await startMicMonitoring();
 
-        if (type === 'generate') {
-            await vapi.start(process.env.NEXT_PUBLIC_WORKFLOW_ID!, {
-                variableValues: { username: userName, userid: userId },
-            });
-        } else {
-            const formattedQuestions = questions
-                ? questions.map(q => `- ${q}`).join('\n')
-                : '';
-            await vapi.start(interviewer, {
-                variableValues: { questions: formattedQuestions },
-            });
+            if (type === 'generate') {
+                console.log('🚨 AI CALL TRIGGERED — vapi.start (generate workflow)', { timestamp: Date.now() });
+                await vapi.start(process.env.NEXT_PUBLIC_WORKFLOW_ID!, {
+                    variableValues: { username: userName, userid: userId },
+                });
+            } else {
+                console.log('🚨 AI CALL TRIGGERED — vapi.start (interview)', { timestamp: Date.now() });
+                const formattedQuestions = questions
+                    ? questions.map(q => `- ${q}`).join('\n')
+                    : '';
+                await vapi.start(interviewer, {
+                    variableValues: { questions: formattedQuestions },
+                });
+            }
+        } finally {
+            isCallingRef.current = false;
         }
     };
 
